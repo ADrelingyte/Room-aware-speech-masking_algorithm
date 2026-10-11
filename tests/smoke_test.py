@@ -4,7 +4,8 @@
 
 It makes a few seconds of fake "speech", simulates small rooms for it,
 trains a tiny masker for one epoch with the STOI loss (so NeMo is not
-needed), and generates maskers from the checkpoint. Nothing about the
+needed), generates maskers from the checkpoint and compares it with the
+baseline maskers. Nothing about the
 result is meaningful; the point is that every stage runs and writes the
 files the next stage expects.
 """
@@ -35,7 +36,7 @@ def fake_speech(rng, seconds):
 
 
 def main():
-    rng = np.random.default_rng(0)
+    rng = np.random.default_rng()
     with tempfile.TemporaryDirectory() as tmp:
         dry_wav, dry_txt = os.path.join(tmp, "dry", "wav"), os.path.join(tmp, "dry", "txt")
         simulated = os.path.join(tmp, "simulated")
@@ -54,7 +55,6 @@ def main():
             "input_path": dry_wav,
             "output_dir": simulated,
             "n_versions_per_input": 2,
-            "seed": 1,
             "room": {"use_random_dims": True, "W_range": [4, 6], "L_range": [4, 6], "H_range": [2.5, 3],
                      "max_order": 2},
             "speaker": {"distance_range_m": [1.0, 1.5]},
@@ -103,6 +103,17 @@ def main():
         wavs = sorted(os.listdir(generated))
         assert wavs and not any("None" in w for w in wavs), wavs
         print(f"\nGenerated {len(wavs)} files, e.g. {wavs[0]}")
+
+        # 4) baselines against the same checkpoint
+        train_cfg.pop("generation")
+        train_cfg["baselines"] = {"checkpoint": checkpoint, "split": "test"}
+        base_yaml = os.path.join(tmp, "baselines.yaml")
+        with open(base_yaml, "w") as f:
+            yaml.safe_dump(train_cfg, f)
+        base_dir = os.path.join(tmp, "baselines")
+        run("evaluate_baselines.py", "--config", base_yaml, "--output-dir", base_dir)
+        with open(os.path.join(base_dir, "baseline_summary.csv")) as f:
+            assert len(f.read().strip().splitlines()) == 1 + 5, "expected one line per condition"
 
     print("\nSmoke test passed.")
 

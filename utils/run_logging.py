@@ -4,6 +4,7 @@ file-name tags and the log of skipped RIR examples."""
 import csv
 import json
 import os
+import secrets
 import time
 
 import numpy as np
@@ -55,6 +56,44 @@ def unique_prefix(prefix, used):
     count = used.get(prefix, 0)
     used[prefix] = count + 1
     return prefix if count == 0 else f"{prefix}_dup{count:03d}"
+
+
+# ---------------------------------------------------------------------------
+# Seeds
+# ---------------------------------------------------------------------------
+# No seed is fixed in the code. A seed left empty in the config is drawn at
+# random, printed, and written to seeds.json in the output folder, so any run
+# can be repeated afterwards by copying the values into the config.
+
+def load_seeds(output_root):
+    """Seeds saved by an earlier run in this output folder ({} if none)."""
+    path = os.path.join(output_root, "seeds.json")
+    if not os.path.exists(path):
+        return {}
+    with open(path, "r") as f:
+        return json.load(f)
+
+
+def save_seeds(output_root, seeds):
+    saved = load_seeds(output_root)
+    saved.update({name: value for name, value in seeds.items() if value is not None})
+    write_json(os.path.join(output_root, "seeds.json"), saved)
+
+
+def choose_seed(name, configured, *fallbacks):
+    """The configured seed, else the first fallback that is set (a seed stored
+    in the checkpoint or in seeds.json, so that generation, evaluation or a
+    resumed run see the same split and rooms as training), else a random one."""
+    if configured is not None:
+        seed, origin = int(configured), "config"
+    else:
+        known = [value for value in fallbacks if value is not None]
+        if known:
+            seed, origin = int(known[0]), "earlier run"
+        else:
+            seed, origin = secrets.randbelow(2 ** 31), "random"
+    print(f"[SEED] {name} = {seed} ({origin})", flush=True)
+    return seed
 
 
 # ---------------------------------------------------------------------------

@@ -751,9 +751,13 @@ def simulate_one_wav(
 
         ngm_sources: List[Tuple[Sequence[float], np.ndarray, Optional[Cardioid]]] = []
         for idx, pos in enumerate(np.asarray(ngm_positions, float)):
-            seed_val = (0 if seed is None else int(seed)) + 104729 * idx
-            np.random.seed(seed_val)
-            random.seed(seed_val)
+            # With a seed, every NGM gets its own reproducible noise. Without
+            # one, the generators are left alone: re-seeding them with a fixed
+            # value here would make every later room of the run identical.
+            if seed is not None:
+                seed_val = int(seed) + 104729 * idx
+                np.random.seed(seed_val)
+                random.seed(seed_val)
             noise_sig = shaped_noise_like(speech) if noise_type == "SSN" else white_noise(N)
             aim_vec = np.array([0.0, 0.0, -1.0], dtype=float)
             az, col = cartesian_to_spherical(aim_vec)

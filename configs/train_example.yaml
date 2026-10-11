@@ -38,11 +38,16 @@ training:
   grad_clip_norm: 1.0
   resume_checkpoint: null             # path to an epoch_XXX.pt to continue an interrupted run
 
-  # Data split, done per dry utterance
+  # Data split. split_by: speaker keeps every talker in one subset (validation
+  # and test talkers are never heard in training); utterance only keeps the
+  # room versions of each sentence together. Speakers are read from LibriSpeech
+  # names (1234-5678-0001 -> speaker 1234); set speaker_regex for other corpora.
+  split_by: "speaker"
+  speaker_regex: null
   val_split: 0.1
   test_split: 0.05
-  split_seed: 1234
-  run_seed: 5678
+  split_seed: null                    # leave empty for a random seed; the value used is saved in seeds.json
+  run_seed: null                      # model initialisation and batch order; same rule
 
   # Model selection
   epoch_selection_metric: "val_total" # best epoch of a run: val_total | val_ctc | val_stoi | val_mse
@@ -71,3 +76,20 @@ generation:
   # target_mcr_db and deployment_delay_ms default to the values stored in the checkpoint.
   # Uncomment to generate with another delay than the one used in training:
   # deployment_delay_ms: 14.28
+
+# evaluate_baselines.py: learned masker against simple maskers on the test set,
+# with the same split, rooms and MCR as training. See README, "Baselines".
+baselines:
+  checkpoint: null                    # best.pt of a training run; needed for the "model" condition
+  conditions: [unmasked, ssn_corpus, ssn_utterance, white_noise, model]
+  split: "test"                       # train | val | test
+  acoustic_mode: "rir"                # rir | dry
+  # target_mcr_db and deployment_delay_ms default to the values stored in the checkpoint
+  seed: null                          # noise seed; empty = random, saved in seeds.json
+  save_audio: true                    # 32-bit float wav for every condition
+  limit_files: 0                      # 0 = whole split
+  wer: false                          # also transcribe with the ASR model (needs NeMo; slow)
+  ltass:                              # long-term spectrum for ssn_corpus, from the training speech
+    n_fft: 2048
+    vad_threshold_db: 40              # ignore frames this far below the loudest frame of their utterance
+    max_utterances: 0                 # 0 = all training utterances

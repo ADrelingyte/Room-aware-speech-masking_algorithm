@@ -36,7 +36,10 @@ from utils.dataset import SpeechDataset, collate_fn
 from utils.losses import LOSS_TYPES, batch_objective, is_better, metric_should_maximize
 from utils.run_logging import (
     append_jsonl,
+    choose_seed,
     configure_rir_warning_log,
+    load_seeds,
+    save_seeds,
     float_to_tag,
     sanitize_name,
     save_audio_triplet,
@@ -116,6 +119,16 @@ def load_checkpoint(path, device):
 def stored_mcr(checkpoint):
     """Target MCR of a checkpoint. Older checkpoints store it as target_snr_db."""
     return checkpoint.get("target_mcr_db", checkpoint.get("target_snr_db"))
+
+
+def stored_seed(checkpoint, name):
+    """A seed saved in a checkpoint, or in the config it was trained with."""
+    if not checkpoint:
+        return None
+    if checkpoint.get(name) is not None:
+        return checkpoint[name]
+    section, key = {"split_seed": ("training", "split_seed"), "rooms_seed": ("rooms", "seed")}[name]
+    return ((checkpoint.get("cfg") or {}).get(section) or {}).get(key)
 
 
 def read_settings(cfg):
@@ -358,6 +371,8 @@ def train_one_run(cfg, settings, train_loader, val_loader, device, target_mcr_db
         "deployment_delay_ms": delay_ms,
         "deployment_delay_samples": delay_samples,
         "run_seed": run_seed,
+        "split_seed": settings.get("split_seed"),
+        "rooms_seed": settings.get("rooms_seed"),
         "epoch_selection_metric": epoch_metric,
     }
     append_jsonl(step_log_path, {
@@ -672,8 +687,24 @@ def main():
     test_split = float(get(cfg, "training", "test_split", 0.05))
     if val_split <= 0 or test_split <= 0 or val_split + test_split >= 1:
         raise ValueError("Need 0 < val_split, 0 < test_split and val_split + test_split < 1.")
-    split_seed = int(get(cfg, "training", "split_seed", 1234))
-    run_seed = int(get(cfg, "training", "run_seed", 5678))
+
+    # Generation reads the split of the run that produced the checkpoint, so
+    # the checkpoint is loaded before the split is made.
+    gen_cfg = cfg.get("generation") or {}
+    gen_checkpoint = None
+    if gen_cfg.get("only"):
+        if not gen_cfg.get("ckpt"):
+            raise ValueError("generation.only: true needs generation.ckpt")
+        gen_checkpoint = load_checkpoint(gen_cfg["ckpt"], device)
+
+    saved_seeds = load_seeds(output_root)
+    split_seed = choose_seed(
+        "split_seed", get(cfg, "training", "split_seed"),
+        stored_seed(gen_checkpoint, "split_seed"), saved_seeds.get("split_seed"),
+    )
+    run_seed = choose_seed("run_seed", get(cfg, "training", "run_seed"))
+    settings["split_seed"] = split_seed
+    save_seeds(output_root, {"split_seed": split_seed, "run_seed": run_seed})
 
     # Configs written before the rename call this target_snr_db_list.
     mcr_values = get(cfg, "training", "target_mcr_db_list", get(cfg, "training", "target_snr_db_list", [5.0]))
@@ -699,7 +730,9 @@ def main():
         rir_dir=get(cfg, "dataset", "rir_dir"),
     )
     train_set, val_set, test_set, split_info = grouped_train_val_test_split(
-        dataset, val_split, test_split, split_seed
+        dataset, val_split, test_split, split_seed,
+        split_by=get(cfg, "training", "split_by", "utterance"),
+        speaker_regex=get(cfg, "training", "speaker_regex", None),
     )
     save_split_manifests(
         dataset, split_info,
@@ -707,6 +740,12 @@ def main():
         os.path.join(output_root, "dataset_split.csv"),
     )
     counts = split_info["counts"]
+    if "speakers" in counts:
+        print(
+            f"[SPLIT] by speaker: train {counts['train_speakers']}, val {counts['validation_speakers']}, "
+            f"test {counts['test_speakers']} of {counts['speakers']} speakers",
+            flush=True,
+        )
     print(
         f"[SPLIT] train {counts['train_items']} items / {counts['train_utterances']} utterances, "
         f"val {counts['validation_items']} / {counts['validation_utterances']}, "
@@ -734,11 +773,8 @@ def main():
     # ------------------------------------------------------------------
     # Generation only
     # ------------------------------------------------------------------
-    gen_cfg = cfg.get("generation") or {}
-    if gen_cfg.get("only"):
-        if not gen_cfg.get("ckpt"):
-            raise ValueError("generation.only: true needs generation.ckpt")
-        checkpoint = load_checkpoint(gen_cfg["ckpt"], device)
+    if gen_checkpoint is not None:
+        checkpoint = gen_checkpoint
         model = build_waveunet(cfg, device)
         model.load_state_dict(checkpoint["model_state_dict"])
 

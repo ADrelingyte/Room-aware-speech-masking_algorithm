@@ -1,4 +1,4 @@
-# Room-aware-speech-masking_algorithm# Neural speech masker
+# Neural speech masker
 
 Code for training a Wave-U-Net that generates an additive masking signal to
 reduce the intelligibility of a nearby talker for a listener in the same room.
@@ -67,8 +67,20 @@ simulated/
 Each `.npz` holds `h` (`[n_mics, n_sources, max_len]`), `lengths` and `fs`.
 Training uses the first microphone (left ear) and the first NGM.
 
-The background babble recordings used in the simulation are not distributed
-here; put the paths of your own recordings in the simulation config.
+### Babble files
+
+The simulation can add background babble if necessary for your experiments (other people talking) to the
+rendered mixtures. A new repository will be added eventually providing a .exe file for room simulation for easier use. 
+
+```yaml
+babble:
+  enabled: true
+  babble_paths:
+    - "/path/to/office_noise_1.wav"
+    - "/path/to/office_noise_2.wav"
+  n_babble: 8
+  snr_db_range: [-6.0, 6.0]
+```
 
 ## Usage
 
@@ -138,8 +150,22 @@ python train.py --config configs/local_train.yaml --output-dir runs/ctc_stoi_rir
 
 For every item of the split this writes `*_masker_at_listener.wav`,
 `*_speech_at_listener.wav` and `*_masked_listener.wav`. Use the same
-`--output-dir`, `split_seed`, `val_split` and `test_split` as in training so
-that the split is the same.
+`val_split`, `test_split` and `split_by` as in training; the split seed is
+read from the checkpoint, so the split is the same.
+
+
+## Seeds
+
+No seed is fixed in the code or in the example configs. Every seed left
+empty (`training.split_seed`, `training.run_seed`, `rooms.seed`,
+`baselines.seed`, and `seed` in the simulation config) is drawn at random at
+start-up, printed as `[SEED] ... (random)`, and saved in `seeds.json` in the
+output folder. Checkpoints also store the split and rooms seeds.
+
+To repeat a run exactly, copy the values from `seeds.json` into the config.
+Generation, `evaluate_baselines.py` and resumed runs take the split (and
+rooms) seed from the checkpoint or from `seeds.json` when the config leaves
+it empty, so they always work on the subsets of the training run.
 
 ## Processing delay
 
@@ -194,23 +220,12 @@ which is 380 samples or 23.75 ms with the default model. `deployment_delay_ms`
 does not remove or account for that look-ahead; it only adds latency after the
 network.
 
-## Things to know
-
-- **Split.** Every utterance exists in several rooms. The split is made per
-  utterance, so all rooms of a sentence are in the same subset.
-- **Level (MCR).** The masker, i.e. the concealer, is rescaled to the target
-  mixture-to-concealer ratio. The mixture is the reverberant speech at the
-  listener (dry speech through RIR2) and the concealer is the masker at the
-  listener.
-- **Window.** The Wave-U-Net works on about 7 s of audio (112,000 output
-  samples). It is best to select your corpus to have audios of 7s or less to avoid
-  alignment issues.
-
 
 ## Repository
 
 ```
 train.py               training, model selection, test, masker generation
+evaluate_baselines.py  learned masker vs SSN / white noise on the test set
 simulate_rooms.py      room simulation and RIR export (pyroomacoustics)
 configs/               example configurations
 model/                 Wave-U-Net
@@ -219,7 +234,7 @@ utils/
   acoustics.py         RIR convolution, delay, MCR scaling, full forward pass
   losses.py            CTC / STOI objectives and model-selection helpers
   frozen_asr.py        frozen NeMo CTC model with a differentiable front-end
-  splits.py            train / validation / test split per utterance
+  splits.py            train / validation / test split by speaker or utterance
   run_logging.py       json / csv / audio outputs
   spectrograms.py      TensorBoard spectrogram images
 tests/smoke_test.py    end-to-end run on synthetic data
