@@ -1,0 +1,19 @@
+# Python 3.10 or newer.
+# Install PyTorch first, following https://pytorch.org for your CUDA version.
+torch
+torchaudio
+torch_stoi
+numpy
+soundfile
+pyyaml
+tqdm
+tensorflow            # only used to write TensorBoard logs
+tensorboard
+
+# ASR loss (not needed for loss: stoi with track_ctc: false)
+nemo_toolkit[asr]
+
+# Room simulation (simulate_rooms.py)
+pyroomacoustics
+librosa
+plotly                # optional, for the 3D room figures
