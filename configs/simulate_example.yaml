@@ -1,0 +1,68 @@
+# Example configuration for simulate_rooms.py:
+#   python simulate_rooms.py --config configs/my_simulation.yaml
+
+input_path: "/path/to/dry/wav"        # one wav or a folder of wavs
+output_dir: "/path/to/simulated"
+n_versions_per_input: 5               # random rooms per utterance (_v01 ... _v05)
+seed: 1234
+
+room:
+  use_random_dims: true
+  W_range: [13.0, 50.0]               # metres
+  L_range: [5.0, 26.0]
+  H_range: [3.0, 5.0]
+  use_random_rt60: true
+  rt60_range: [0.2, 0.8]              # seconds
+  absorption_range: [0.2, 0.6]
+  max_order: 12                       # image-source reflection order
+  max_tries: 50
+
+mics:                                 # the listener: two ears around a random centre
+  mic_center_height_range: [1.0, 1.4]
+  binaural_offset_m: 0.10
+
+speaker:                              # the talker
+  distance_range_m: [1.20, 2.50]      # distance to the listener
+  height_range: [1.4, 1.7]
+  orientation_mode: "random"
+
+babble:
+  enabled: true
+  babble_paths:                       # long background recordings, not distributed with this repository
+    - "/path/to/babble_1.wav"
+    - "/path/to/babble_2.wav"
+  n_babble: 8
+  snr_db: null                        # null = draw from snr_db_range for each room
+  snr_db_range: [-6.0, 6.0]
+  min_dist_m: 0.0
+  min_dist_factor_vs_spk_mic: 2.0
+  height_range: [1.2, 1.7]
+
+ngm:                                  # the masking device
+  enabled: true
+  mode: "table_listener"              # table_listener | grid
+  noise_type: "SSN"                   # SSN | WN, noise used in the rendered mixture
+  snr_db: null
+  snr_db_range: [-15.0, 10.0]
+  table_dist_to_listener_range: [0.50, 0.80]
+  table_height_range: [0.70, 0.95]
+  table_margin: 0.3
+  spacing_factor: 1.5                 # the next three are only used in grid mode
+  min_wall_dist: 0.6
+  jitter_max: 0.6
+
+rirs:
+  rir1_spk_to_ngm: true
+  rir2_spk_to_listener: true
+  rir3_ngm_to_listener: true
+  write_bundle_all: false
+  rir3_ngm_to_listener_combined: false
+
+output:
+  write_yaml: true
+  write_rirs: true
+  write_onlynoise: true
+  write_pre_ngm_mix: true
+  write_speech_only: true
+  write_3d_viz: true                  # needs plotly
+  recursive_input: false

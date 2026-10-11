@@ -1,0 +1,73 @@
+# Example configuration for train.py. Copy it, set the four paths, then:
+#   python train.py --config configs/my_config.yaml --output-dir runs/my_run
+
+dataset:
+  # Output folder of simulate_rooms.py: <utt>_vNN.wav and the RIR .npz files
+  wav_dir: "/path/to/simulated"
+  rir_dir: "/path/to/simulated"       # leave equal to wav_dir unless the RIRs were moved
+  # Dry speech <utt>.wav and transcripts <utt>.txt
+  speech_dir: "/path/to/dry/wav"
+  txt_dir: "/path/to/dry/txt"
+  sample_rate: 16000
+
+model:
+  channels: [8, 16, 32, 64, 128]
+  kernel_size: 11
+  output_samples: 112000              # 7 s at 16 kHz
+
+training:
+  device: "cuda"
+
+  # What to train
+  loss: "ctc_stoi"                    # ctc_stoi: -CTC + lambda * STOI   |   stoi: STOI only
+  acoustic_mode: "rir"                # rir: through the room responses  |   dry: no room (ablation)
+  # Mixture-to-concealer ratio in dB: reverberant speech over masker, both at the
+  # listener. 5 means the speech is 5 dB above the masker. One run per value.
+  target_mcr_db_list: [5]
+  lambda_stoi_list: [50]              # one run per value (ignored with loss: stoi)
+  # Latency between the network output and the NGM loudspeaker, in ms
+  # (14.28 ms = 228 samples at 16 kHz). One value per run; see README, "Processing delay".
+  deployment_delay_ms: 0.0
+  track_ctc: false                    # with loss: stoi, also log the CTC value (loads the ASR model)
+  asr_model: "stt_en_fastconformer_ctc_xxlarge"
+
+  # Optimisation
+  epochs: 100
+  batch_size: 4
+  lr: 0.0001
+  grad_clip_norm: 1.0
+  resume_checkpoint: null             # path to an epoch_XXX.pt to continue an interrupted run
+
+  # Data split, done per dry utterance
+  val_split: 0.1
+  test_split: 0.05
+  split_seed: 1234
+  run_seed: 5678
+
+  # Model selection
+  epoch_selection_metric: "val_total" # best epoch of a run: val_total | val_ctc | val_stoi | val_mse
+  selection_metric: "best_val_total"  # best run of the grid: best_val_total | best_val_ctc | best_val_stoi | best_val_mse
+
+  # Data loading and logging
+  num_workers: 0
+  pin_memory: false
+  json_step_log_every: 20
+  tb_log_audio: true
+  save_audio_each_epoch: true
+  save_audio_final_epoch: true
+
+# Set only: true to write maskers from a trained checkpoint instead of training.
+generation:
+  only: false
+  ckpt: "runs/my_run/mcr_5dB_lambda_50_delay_0ms/checkpoints/best.pt"
+  out_dir: "generated/my_run"
+  split: "test"                       # train | val | test | all
+  acoustic_mode: "rir"
+  limit_files: 0                      # 0 = whole split
+  save_masked: true                   # also write speech + masker
+  save_clean: true                    # also write the speech at the listener
+  use_original_names: true
+  filename_tag: ""                    # optional text added to the file names
+  # target_mcr_db and deployment_delay_ms default to the values stored in the checkpoint.
+  # Uncomment to generate with another delay than the one used in training:
+  # deployment_delay_ms: 14.28
