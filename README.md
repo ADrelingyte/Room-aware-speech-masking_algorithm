@@ -201,19 +201,11 @@ network.
 - **Level (MCR).** The masker, i.e. the concealer, is rescaled to the target
   mixture-to-concealer ratio. The mixture is the reverberant speech at the
   listener (dry speech through RIR2) and the concealer is the masker at the
-  listener (after RIR3), so an MCR of 5 dB means the speech is 5 dB above the
-  masker. The network decides the shape of the masker, not its level.
+  listener.
 - **Window.** The Wave-U-Net works on about 7 s of audio (112,000 output
-  samples). Longer utterances are cropped (randomly in training, from the
-  start otherwise), shorter ones are zero padded.
-- **Look-ahead.** The network uses valid convolutions with context on both
-  sides, so each masker sample depends on a short stretch of future input
-  (half of input size minus output size, printed at start-up). See
-  "Processing delay" above.
-- **ASR front-end.** The CTC loss needs gradients with respect to the
-  waveform, which NeMo's own preprocessor does not provide. The log-mel
-  features are therefore computed in `utils/frozen_asr.py`, without
-  pre-emphasis or per-feature normalisation.
+  samples). It is best to select your corpus to have audios of 7s or less to avoid
+  alignment issues.
+
 
 ## Repository
 
